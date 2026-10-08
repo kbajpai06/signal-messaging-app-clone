@@ -2,7 +2,8 @@
 @import "../styles/tokens.css";
 
 @theme inline {
-  --color-primary: var(--color-primary);
+  --color-brand: var(--color-primary);
+  --color-brand-hover: var(--color-primary-hover);
   --color-surface: var(--color-bg);
   --color-sidebar: var(--color-bg-sidebar);
   --color-hover: var(--color-bg-hover);
@@ -10,9 +11,11 @@
   --color-line: var(--color-border);
   --color-fg: var(--color-text);
   --color-fg-muted: var(--color-text-secondary);
-  --color-bubble-sent: var(--color-bubble-sent);
-  --color-bubble-received: var(--color-bubble-received);
-  --font-sans: var(--font-sans);
+  --color-fg-subtle: var(--color-text-tertiary);
+  --color-sent: var(--color-bubble-sent);
+  --color-received: var(--color-bubble-received);
+  --color-presence: var(--color-online);
+  --color-critical: var(--color-danger);
 }
 
 html,
@@ -20,10 +23,14 @@ body {
   height: 100%;
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 body {
   background: var(--color-bg);
   color: var(--color-text);
-  font-family: var(--font-sans);
+  font-family: var(--font-inter, system-ui), var(--font-sans);
   font-size: var(--text-body);
   -webkit-font-smoothing: antialiased;
 }
