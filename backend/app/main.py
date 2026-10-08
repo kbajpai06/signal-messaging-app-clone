@@ -12,7 +12,11 @@ from app.core.config import Settings, get_settings
 from app.core.database import build_engine, build_session_factory, init_models
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
-from app.realtime.gateway import NullGateway
+from app.realtime.connection_manager import ConnectionManager
+from app.realtime.context import RealtimeRuntime
+from app.realtime.protocol import CLOSE_GOING_AWAY
+from app.realtime.rate_limit import TYPING_MIN_INTERVAL_MS, MinIntervalLimiter
+from app.realtime.ws_endpoint import router as ws_router
 from app.seed.seed_data import seed_if_empty
 from app.services.events import EventPublisher
 from app.services.storage import LocalFileStorage
@@ -21,6 +25,10 @@ from app.services.storage import LocalFileStorage
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
+
+    # The ConnectionManager IS the RealtimeGateway: services only ever see EventPublisher.
+    manager = ConnectionManager()
+    events = EventPublisher(manager)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -31,18 +39,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await seed_if_empty(session_factory)
         app.state.engine = engine
         app.state.session_factory = session_factory
+        app.state.realtime = RealtimeRuntime(
+            session_factory=session_factory,
+            settings=settings,
+            manager=manager,
+            events=events,
+            typing_limiter=MinIntervalLimiter(TYPING_MIN_INTERVAL_MS),
+        )
         try:
             yield
         finally:
+            await manager.close_all(CLOSE_GOING_AWAY)
             await engine.dispose()
 
-    app = FastAPI(title="Signal Clone API", version="0.3.0", lifespan=lifespan)
+    app = FastAPI(title="Signal Clone API", version="0.4.0", lifespan=lifespan)
     app.state.settings = settings
-
-    # Phase 4 replaces NullGateway with the WebSocket ConnectionManager (one line).
-    gateway = NullGateway()
-    app.state.gateway = gateway
-    app.state.events = EventPublisher(gateway)
+    app.state.gateway = manager
+    app.state.events = events
 
     upload_root = Path(settings.upload_dir)
     upload_root.mkdir(parents=True, exist_ok=True)
@@ -60,6 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(api_router, prefix="/api/v1")
+    app.include_router(ws_router)  # wss://<host>/ws
     # Avatars are non-sensitive, so a static mount is enough (filenames are random UUIDs).
     app.mount("/uploads", StaticFiles(directory=upload_root), name="uploads")
     return app

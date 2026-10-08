@@ -85,6 +85,34 @@ class EventPublisher:
             },
         )
 
+    async def typing(
+        self,
+        user_ids: Collection[str],
+        *,
+        conversation_id: str,
+        user_id: str,
+        is_typing: bool,
+    ) -> None:
+        await self._publish(
+            user_ids,
+            "typing",
+            {"conversation_id": conversation_id, "user_id": user_id, "is_typing": is_typing},
+        )
+
+    async def presence_update(
+        self,
+        user_ids: Collection[str],
+        *,
+        user_id: str,
+        online: bool,
+        last_seen_at: int | None,
+    ) -> None:
+        await self._publish(
+            user_ids,
+            "presence.update",
+            {"user_id": user_id, "online": online, "last_seen_at": last_seen_at},
+        )
+
     async def _publish(self, user_ids: Collection[str], event_type: str, payload: dict) -> None:
         if not user_ids:
             return

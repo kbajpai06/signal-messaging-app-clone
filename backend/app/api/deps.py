@@ -8,20 +8,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.errors import UnauthorizedError
 from app.models.user import User
+from app.realtime.gateway import RealtimeGateway
 from app.repositories.contact_repo import ContactRepository
 from app.repositories.conversation_repo import ConversationRepository
 from app.repositories.member_repo import MemberRepository
-from app.repositories.message_repo import MessageRepository
-from app.repositories.session_repo import UserSessionRepository
 from app.repositories.user_repo import UserRepository
-from app.services.access import ConversationAccess
+from app.services import factory
 from app.services.auth_service import AuthContext, AuthService
 from app.services.avatar_service import AvatarService
 from app.services.contact_service import ContactService
 from app.services.conversation_service import ConversationService
 from app.services.events import EventPublisher
 from app.services.group_service import GroupService
-from app.services.message_appender import MessageAppender
 from app.services.message_service import MessageService
 from app.services.receipt_service import ReceiptService
 from app.services.user_service import UserService
@@ -52,6 +50,13 @@ def get_events(request: Request) -> EventPublisher:
 EventsDep = Annotated[EventPublisher, Depends(get_events)]
 
 
+def get_gateway(request: Request) -> RealtimeGateway:
+    return request.app.state.gateway
+
+
+GatewayDep = Annotated[RealtimeGateway, Depends(get_gateway)]
+
+
 def get_avatar_service(request: Request, settings: SettingsDep) -> AvatarService:
     return AvatarService(request.app.state.file_storage, max_bytes=settings.max_upload_bytes)
 
@@ -59,16 +64,11 @@ def get_avatar_service(request: Request, settings: SettingsDep) -> AvatarService
 AvatarServiceDep = Annotated[AvatarService, Depends(get_avatar_service)]
 
 
-# --- service factories -------------------------------------------------------------------
+# --- service factories (wiring lives in app.services.factory) -----------------------------
 
 
 def get_auth_service(db: DbSession, settings: SettingsDep) -> AuthService:
-    return AuthService(
-        users=UserRepository(db),
-        sessions=UserSessionRepository(db),
-        uow=db,
-        settings=settings,
-    )
+    return factory.build_auth_service(db, settings)
 
 
 def get_user_service(db: DbSession, avatars: AvatarServiceDep) -> UserService:
@@ -83,27 +83,13 @@ def get_contact_service(db: DbSession, events: EventsDep) -> ContactService:
     )
 
 
-def _access(db: AsyncSession) -> ConversationAccess:
-    return ConversationAccess(
-        conversations=ConversationRepository(db), members=MemberRepository(db)
-    )
-
-
-def _appender(db: AsyncSession) -> MessageAppender:
-    return MessageAppender(
-        conversations=ConversationRepository(db),
-        members=MemberRepository(db),
-        messages=MessageRepository(db),
-    )
-
-
 def get_conversation_service(db: DbSession, events: EventsDep) -> ConversationService:
     return ConversationService(
         conversations=ConversationRepository(db),
         members=MemberRepository(db),
         users=UserRepository(db),
-        access=_access(db),
-        appender=_appender(db),
+        access=factory.build_access(db),
+        appender=factory.build_appender(db),
         events=events,
         uow=db,
     )
@@ -114,8 +100,8 @@ def get_group_service(db: DbSession, events: EventsDep, avatars: AvatarServiceDe
         conversations=ConversationRepository(db),
         members=MemberRepository(db),
         users=UserRepository(db),
-        access=_access(db),
-        appender=_appender(db),
+        access=factory.build_access(db),
+        appender=factory.build_appender(db),
         avatars=avatars,
         events=events,
         uow=db,
@@ -123,18 +109,11 @@ def get_group_service(db: DbSession, events: EventsDep, avatars: AvatarServiceDe
 
 
 def get_message_service(db: DbSession, events: EventsDep) -> MessageService:
-    return MessageService(
-        messages=MessageRepository(db),
-        members=MemberRepository(db),
-        access=_access(db),
-        appender=_appender(db),
-        events=events,
-        uow=db,
-    )
+    return factory.build_message_service(db, events)
 
 
 def get_receipt_service(db: DbSession, events: EventsDep) -> ReceiptService:
-    return ReceiptService(members=MemberRepository(db), access=_access(db), events=events, uow=db)
+    return factory.build_receipt_service(db, events)
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]

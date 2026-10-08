@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Header, Response, status
 
-from app.api.deps import AuthContextDep, AuthServiceDep, CurrentUserDep
+from app.api.deps import AuthContextDep, AuthServiceDep, CurrentUserDep, GatewayDep
 from app.schemas.auth import AuthOut, OtpRequestIn, OtpRequestOut, OtpVerifyIn
 from app.schemas.user import UserOut
 
@@ -39,6 +39,7 @@ async def me(user: CurrentUserDep) -> UserOut:
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(context: AuthContextDep, service: AuthServiceDep) -> Response:
+async def logout(context: AuthContextDep, service: AuthServiceDep, gateway: GatewayDep) -> Response:
     await service.logout(context.session_id)
+    await gateway.close_session(context.session_id)  # drop this session's live sockets
     return Response(status_code=status.HTTP_204_NO_CONTENT)

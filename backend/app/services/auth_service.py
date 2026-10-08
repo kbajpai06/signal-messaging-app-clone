@@ -28,6 +28,7 @@ class AuthResult:
 class AuthContext:
     user: User
     session_id: str
+    expires_at: int
 
 
 class AuthService:
@@ -90,7 +91,9 @@ class AuthService:
         user = await self._users.get(claims.user_id)
         if user is None:
             raise UnauthorizedError("Session is no longer valid", code="session_invalid")
-        return AuthContext(user=user, session_id=user_session.id)
+        return AuthContext(
+            user=user, session_id=user_session.id, expires_at=user_session.expires_at
+        )
 
     async def logout(self, session_id: str) -> None:
         await self._sessions.revoke(session_id, now_ms())

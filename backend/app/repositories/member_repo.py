@@ -2,7 +2,7 @@ from collections.abc import Collection
 
 from sqlalchemy import func, select, update
 
-from app.models import ConversationMember, User
+from app.models import Conversation, ConversationMember, User
 from app.models.enums import MemberRole
 
 
@@ -74,6 +74,26 @@ class MemberRepository:
             )
         )
         return int(await self._session.scalar(stmt) or 0)
+
+    async def active_conversation_ids(self, user_id: str) -> list[str]:
+        stmt = select(ConversationMember.conversation_id).where(
+            ConversationMember.user_id == user_id,
+            ConversationMember.left_at.is_(None),
+        )
+        return list((await self._session.scalars(stmt)).all())
+
+    async def undelivered(self, user_id: str) -> list[tuple[str, int]]:
+        """(conversation_id, last_seq) where this member's delivered cursor lags the tail."""
+        stmt = (
+            select(Conversation.id, Conversation.last_seq)
+            .join(ConversationMember, ConversationMember.conversation_id == Conversation.id)
+            .where(
+                ConversationMember.user_id == user_id,
+                ConversationMember.left_at.is_(None),
+                ConversationMember.last_delivered_seq < Conversation.last_seq,
+            )
+        )
+        return [(cid, seq) for cid, seq in (await self._session.execute(stmt)).all()]
 
     async def oldest_active_member(
         self, conversation_id: str, *, excluding: str
