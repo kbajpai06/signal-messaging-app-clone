@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     cors_origin_regex: str | None = None
     upload_dir: str = "./uploads"
+    max_upload_bytes: int = 2 * 1024 * 1024
     seed_on_startup: bool = True
 
     @property
