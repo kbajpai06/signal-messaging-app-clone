@@ -1,8 +1,10 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.health import router as health_router
 from app.api.v1.router import api_router
@@ -10,7 +12,10 @@ from app.core.config import Settings, get_settings
 from app.core.database import build_engine, build_session_factory, init_models
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.realtime.gateway import NullGateway
 from app.seed.seed_data import seed_if_empty
+from app.services.events import EventPublisher
+from app.services.storage import LocalFileStorage
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -31,8 +36,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await engine.dispose()
 
-    app = FastAPI(title="Signal Clone API", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="Signal Clone API", version="0.3.0", lifespan=lifespan)
     app.state.settings = settings
+
+    # Phase 4 replaces NullGateway with the WebSocket ConnectionManager (one line).
+    gateway = NullGateway()
+    app.state.gateway = gateway
+    app.state.events = EventPublisher(gateway)
+
+    upload_root = Path(settings.upload_dir)
+    upload_root.mkdir(parents=True, exist_ok=True)
+    app.state.file_storage = LocalFileStorage(upload_root)
 
     app.add_middleware(
         CORSMiddleware,
@@ -46,6 +60,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(api_router, prefix="/api/v1")
+    # Avatars are non-sensitive, so a static mount is enough (filenames are random UUIDs).
+    app.mount("/uploads", StaticFiles(directory=upload_root), name="uploads")
     return app
 
 

@@ -40,6 +40,18 @@ class ConflictError(AppError):
     default_message = "Resource already exists"
 
 
+class PayloadTooLargeError(AppError):
+    status_code = 413
+    default_code = "payload_too_large"
+    default_message = "File is too large"
+
+
+class UnsupportedMediaError(AppError):
+    status_code = 415
+    default_code = "unsupported_media"
+    default_message = "Unsupported file type"
+
+
 def _error_body(code: str, message: str, details: list[dict[str, str]] | None = None) -> dict:
     body: dict = {"code": code, "message": message}
     if details:

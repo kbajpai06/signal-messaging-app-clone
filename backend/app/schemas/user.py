@@ -4,6 +4,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class UserOut(BaseModel):
+    """The authenticated user's own profile."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -15,6 +17,27 @@ class UserOut(BaseModel):
     avatar_color: str
     last_seen_at: int | None
     created_at: int
+
+
+class UserSummary(BaseModel):
+    """Public view of another user (no phone number). Used for members and senders."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    display_name: str
+    username: str | None
+    about: str | None
+    avatar_url: str | None
+    avatar_color: str
+    last_seen_at: int | None
+
+
+class UserDirectoryEntry(UserSummary):
+    """Search and contact results: shows the phone number so people can be found and added."""
+
+    phone_number: str
+    is_contact: bool = False
 
 
 class UserUpdate(BaseModel):
